@@ -109,6 +109,7 @@ static void siphash(swig_uint64 *out, const char *inc, unsigned long inlen) {
 #undef SIPROUND
 
 class GO:public Language {
+  protected:
   static const char *const usage;
 
   // Go package name.
@@ -245,7 +246,7 @@ public:
     director_prot_ctor_code = NewString("_swig_gopanic(\"accessing abstract class or protected constructor\");");
   }
 
-private:
+protected:
   /* ------------------------------------------------------------
    * main()
    * ------------------------------------------------------------ */
@@ -349,10 +350,10 @@ private:
     // This test may be removed in the future, when we can assume that
     // everybody has upgraded to Go 1.1.  The code below is prepared
     // for this test to simply be taken out.
-    if (intgo_type_size == 0 && !display_help) {
+    /*if (intgo_type_size == 0 && !display_help) {
       Printf(stderr, "SWIG -go: -intgosize option required but not specified\n");
       SWIG_exit(EXIT_FAILURE);
-    }
+    }*/
 
     if (intgo_type_size == 32) {
       Preprocessor_define("SWIGGO_INTGO_SIZE 32", 0);
@@ -632,13 +633,33 @@ private:
       if (!Getattr(defined_types, ty)) {
 	String *cp = goCPointerType(p.key, false);
 	if (!Getattr(defined_types, cp)) {
-	  Printv(f_go_wrappers, "type ", cp, " uintptr\n", NULL);
+	  /*Printv(f_go_wrappers, "type ", cp, " uintptr\n", NULL);
 	  Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
 	  Printv(f_go_wrappers, "\tSwigcptr() uintptr;\n", NULL);
 	  Printv(f_go_wrappers, "}\n", NULL);
 	  Printv(f_go_wrappers, "func (p ", cp, ") Swigcptr() uintptr {\n", NULL);
 	  Printv(f_go_wrappers, "\treturn uintptr(p)\n", NULL);
-	  Printv(f_go_wrappers, "}\n\n", NULL);
+	  Printv(f_go_wrappers, "}\n\n", NULL);*/
+    Printv(f_go_wrappers, "type SwigClass", ty, " struct {\n", NULL);
+    Printv(f_go_wrappers, "\t", cp, " uintptr\n", NULL);
+    Printv(f_go_wrappers, "}\n\n", NULL);
+    Printv(f_go_wrappers, "func (p SwigClass", ty, ") Swigcptr() uintptr {\n", NULL);
+    Printv(f_go_wrappers, "\treturn p.", cp,"\n", NULL);
+    Printv(f_go_wrappers, "}\n\n", NULL);
+
+    Printv(f_go_wrappers, "func SwigClass", ty, "_setSwigcptr(ptr uintptr) *SwigClass", ty," {\n", NULL);
+    Printv(f_go_wrappers, "\tp := &SwigClass", ty, "{}\n", NULL);
+    Printv(f_go_wrappers, "\tp.", cp, " = ptr\n", NULL);
+    Printv(f_go_wrappers, "\treturn p\n", NULL);
+    Printv(f_go_wrappers, "}\n", NULL);
+
+    Printv(f_go_wrappers, "func (p SwigClass", ty, ") _swigIsSwigClass", ty, "() {\n", NULL);
+    Printv(f_go_wrappers, "}\n\n", NULL);
+
+    Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
+    Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
+    Printv(f_go_wrappers, "\t_swigIsSwigClass", ty, "()\n", NULL);
+    Printv(f_go_wrappers, "}\n\n", NULL);
 	}
 	Delete(cp);
       }
@@ -1131,7 +1152,7 @@ private:
    * Write out Go code to call a cgo function.  This code will go into
    * the generated Go output file.
    * ---------------------------------------------------------------------- */
-  int cgoGoWrapper(const cgoWrapperInfo *info) {
+  virtual int cgoGoWrapper(const cgoWrapperInfo *info) {
 
     Wrapper *dummy = initGoTypemaps(info->parms);
 
@@ -3551,7 +3572,7 @@ private:
    * Emit a constructor for a director class.
    * ------------------------------------------------------------ */
 
-  int classDirectorConstructor(Node *n) {
+  virtual int classDirectorConstructor(Node *n) {
     bool is_ignored = GetFlag(n, "feature:ignore") ? true : false;
 
     String *name = Getattr(n, "sym:name");
@@ -4040,7 +4061,7 @@ private:
    * director class.
    * ------------------------------------------------------------ */
 
-  void makeCgoDirectorDestructorWrapper(String *go_name, String *director_struct_name, String *director_sig) {
+  virtual void makeCgoDirectorDestructorWrapper(String *go_name, String *director_struct_name, String *director_sig) {
     String *wname = Copy(go_name);
     Append(wname, unique_id);
 
@@ -6551,7 +6572,7 @@ private:
    * pointer whose name is returned by this function.
    * ---------------------------------------------------------------------- */
 
-  String *goCPointerType(SwigType *type, bool add_to_hash) {
+  virtual String *goCPointerType(SwigType *type, bool add_to_hash) {
     SwigType *ty = SwigType_typedef_resolve_all(type);
     Node *cn = classLookup(ty);
     String *ex;
@@ -6926,8 +6947,10 @@ private:
  * swig_go()    - Instantiate module
  * ----------------------------------------------------------------------------- */
 
+#include "go_new.cxx"
+
 static Language *new_swig_go() {
-  return new GO();
+  return new GO_New();
 }
 extern "C" Language *swig_go(void) {
   return new_swig_go();
