@@ -9,9 +9,6 @@ public:
      * Override the original class handler. We will utilize
      * the anonymous field feature in go to make the wrapper 
      * code shorter. 
-     * The generated interface will only contains one function,
-     * `convertToXXXClass`. We expect users to use the struct
-     * itself.
      * ---------------------------------------------------- */
 
     int classHandler(Node *n) {
