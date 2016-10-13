@@ -198,6 +198,8 @@ protected:
     String *unique_id;
     // Indicate it is generating a convert function.
     bool convertFunction;
+    // Whether track the object by go gc.
+    bool trackobject_flag;
 
 public:
     GO():package(NULL),
@@ -243,7 +245,8 @@ public:
         defined_types(NULL),
         go_imports(NULL),
         unique_id(NULL),
-        convertFunction(false) {
+        convertFunction(false),
+        trackobject_flag(false) {
         director_multiple_inheritance = 1;
         director_language = 1;
         director_prot_ctor_code = NewString("_swig_gopanic(\"accessing abstract class or protected constructor\");");
@@ -328,6 +331,9 @@ protected:
                     } else {
                         Swig_arg_error();
                     }
+                } else if (strcmp(argv[i], "-trackobject") == 0) {
+                    Swig_mark_arg(i);
+                    trackobject_flag = true;  
                 } else if (strcmp(argv[i], "-help") == 0) {
                     //display_help = true;
                     Printf(stdout, "%s\n", usage);
@@ -1295,9 +1301,6 @@ protected:
             String *goin = goGetattr(p, "tmap:goin");
             if (goin == NULL) {
                 Printv(f_go_wrappers, "\t", ivar, " := ", ln, NULL);
-                if ((i == 0 && info->is_destructor) || ((i > 0 || !info->receiver || info->base || info->is_constructor) && goTypeIsInterface(p, pt)) || (i == 0 && info->receiver && !info->base)) {
-                    Printv(f_go_wrappers, ".Swigcptr()", NULL);
-                }
                 Printv(f_go_wrappers, "\n", NULL);
                 Setattr(p, "emit:goinput", ln);
             } else {
@@ -1311,13 +1314,19 @@ protected:
                 Setattr(p, "emit:goinput", ivar);
             }
 
+            String* swigcptr = NewString("");
+            if ((i == 0 && info->is_destructor) || ((i > 0 || !info->receiver || info->base || info->is_constructor) && goTypeIsInterface(p, pt)) || (i == 0 && info->receiver && !info->base)) {
+                Printv(swigcptr, ".Swigcptr()", NULL);
+            }
+
             bool c_struct_type;
             String *ct = cgoTypeForGoValue(p, pt, &c_struct_type);
             if (c_struct_type) {
-                Printv(call, "*(*C.", ct, ")(unsafe.Pointer(&", ivar, "))", NULL);
+                Printv(call, "*(*C.", ct, ")(unsafe.Pointer(&", ivar, swigcptr, "))", NULL);
             } else {
-                Printv(call, "C.", ct, "(", ivar, ")", NULL);
+                Printv(call, "C.", ct, "(", ivar, swigcptr, ")", NULL);
             }
+            Delete(swigcptr);
             Delete(ct);
 
             p = nextParm(p);
@@ -1342,6 +1351,10 @@ protected:
 
         if (memcpy_ret) {
             Printv(f_go_wrappers, "\tswig_r = *(*", ret_type, ")(unsafe.Pointer(&swig_r_p))\n", NULL);
+        }
+
+        if (trackobject_flag && info->is_constructor && !Getattr(class_node, "feature:notracking")) {
+            Printv(f_go_wrappers, "\tswig_r.SwigTrackObject()\n", NULL);
         }
         
         if (ret_type) {
@@ -1373,6 +1386,10 @@ protected:
         Printv(f_go_wrappers, "}\n\n", NULL);
 
         DelWrapper(dummy);
+
+        if (info->is_destructor) {
+            Setattr(class_node, "hasdtor", "");
+        }
 
         return SWIG_OK;
     }
@@ -2508,9 +2525,12 @@ protected:
                 p = nextSibling(p);
             } else {
                 tm = Copy(tm);
+                String *go_name = goType(p, Getattr(p, "type"));
+                Replaceall(tm, "$input_gotype", go_name);
                 Replaceall(tm, "$result", "swig_r");
                 Replaceall(tm, "$input", Getattr(p, "emit:goinput"));
                 Printv(f_go_wrappers, tm, "\n", NULL);
+                Delete(go_name);
                 Delete(tm);
                 p = Getattr(p, "tmap:goargout:next");
             }
@@ -3052,11 +3072,34 @@ protected:
         Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
         Printv(f_go_wrappers, "\tSwigIs", go_class_name, "()\n", NULL);
 
+        if (trackobject_flag) {
+            Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
+            Printv(f_go_wrappers, "\tSwigUntrackObject()\n", NULL);
+        }
+
         if (is_director) {
             Printv(f_go_wrappers, "\tDirectorInterface() interface{}\n", NULL);
         }
         Append(f_go_wrappers, interfaces);
         Printv(f_go_wrappers, "}\n\n", NULL);
+
+
+        if (trackobject_flag) {
+            Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigTrackObject() {\n", NULL);
+            Printv(f_go_wrappers, "\truntime.SetFinalizer(p, swig", go_class_name, "Finalizer)\n", NULL);
+            Printv(f_go_wrappers, "}\n", NULL);
+
+            Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigUntrackObject() {\n", NULL);
+            Printv(f_go_wrappers, "\truntime.SetFinalizer(p, nil)\n", NULL);
+            Printv(f_go_wrappers, "}\n", NULL);
+
+            Printf(f_go_wrappers, "func swig%sFinalizer(obj *%s) {\n", go_class_name, go_class_name);
+            if (Getattr(class_node, "hasdtor") && !Getattr(n, "feature:notracking")) {
+                Printf(f_go_wrappers, "\tDelete%s(obj)\n", go_name);
+            }
+            Printf(f_go_wrappers, "}\n\n"); 
+        }
+
         ret = SWIG_OK;
 CleanUp:
         Delete(go_name);
@@ -3564,11 +3607,11 @@ CleanUp:
                     Printv(f_go_wrappers, "}\n\n", NULL);
 
 
-                    Printv(f_go_wrappers, "func (p ", go_type_name, ") To", go_base_name, "() ", go_base_type, " {\n", NULL);
-                    Printv(f_go_wrappers, "\treturn p.", chain, "SwigClass", go_base_name, "\n", NULL);
+                    Printv(f_go_wrappers, "func (p *", go_type_name, ") To", go_base_name, "() ", go_base_type, " {\n", NULL);
+                    Printv(f_go_wrappers, "\treturn &p.", chain, "SwigClass", go_base_name, "\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
 
-                    Printv(f_go_wrappers, "func (p ", go_type_name, ") SwigGet", go_base_name, "() ", go_base_type, " {\n", NULL);
+                    Printv(f_go_wrappers, "func (p *", go_type_name, ") SwigGet", go_base_name, "() ", go_base_type, " {\n", NULL);
                     Printv(f_go_wrappers, "\treturn p.To", go_base_name, "()\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
 

@@ -296,3 +296,15 @@ INOUT_TYPEMAP(float, float32);
 INOUT_TYPEMAP(double, float64);
 
 #undef INOUT_TYPEMAP
+
+%typemap(goin) SWIGTYPE *SWIG_TAKEOWN, SWIGTYPE &SWIG_TAKEOWN %{
+    $input.SwigUntrackObject()
+    $result = $input
+%}
+
+%typemap(goargout) SWIGTYPE *SWIG_DROPOWN, SWIGTYPE &SWIG_DROPOWN %{
+    $input.SwigTrackObject()
+%}
+
+#define %notracking %feature("notracking", "1")
+#define %clearnotracking %feature("notracking","")
