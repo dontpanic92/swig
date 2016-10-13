@@ -3122,14 +3122,17 @@ CleanUp:
             // After that it is stored in the `local`, and will be not 
             // processed if we see it later.
             Node* node = ni;
+            List* bs = bases;
             int generate = 0; 
             // 0: interface only; 1: function only; 2: interface + function
             if (Getattr(visited, lname)) {
                 generate = 1;
                 node = Getattr(visited, lname);
+                bs = Getattr(node, "addbase:bases");
                 Setattr(local, lname, NewString(""));
             } else {
                 Setattr(visited, lname, node);
+                Setattr(node, "addbase:bases", bases);
             }
 
             String *ty = NewString(Getattr(node, "type"));
@@ -3144,7 +3147,7 @@ CleanUp:
                 if (generate == 0) {
                     SwigType* result = Getattr(node, "type");
                     Node *cn = classLookup(result);
-                    if (cn && Getattr(cn, "module")) {
+                    if (cn && Getattr(cn, "module") && Getattr(base, "module")) {
                         String* moduleBase = getModuleName(Getattr(Getattr(base, "module"), "name"));
                         String* moduleResult = getModuleName(Getattr(Getattr(cn, "module"), "name"));
                         if (Strcmp(moduleBase, moduleResult) != 0) {
@@ -3156,14 +3159,14 @@ CleanUp:
                     }
                 }
 
-                int r = goBaseMethod(n, bases, node, generate);
+                int r = goBaseMethod(n, bs, node, generate);
                 if (r != SWIG_OK) {
                     return r;
                 }
 
                 if (Getattr(node, "sym:overloaded")) {
                     for (Node *on = Getattr(node, "sym:nextSibling"); on; on = Getattr(on, "sym:nextSibling")) {
-                        r = goBaseMethod(n, bases, on, generate);
+                        r = goBaseMethod(n, bs, on, generate);
                         if (r != SWIG_OK) {
                             return r;
                         }
@@ -3192,7 +3195,7 @@ CleanUp:
                     }
                 }
             } else {
-                int r = goBaseVariable(n, bases, node, generate);
+                int r = goBaseVariable(n, bs, node, generate);
                 if (r != SWIG_OK) {
                     return r;
                 }
