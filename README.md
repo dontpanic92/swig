@@ -1,6 +1,6 @@
 ## Alternative Go Backend For Swig
 
-[![Build Status](https://travis-ci.org/dontpanic92/swig.svg?branch=master)](https://travis-ci.org/dontpanic92/swig)
+[![Build Status](https://travis-ci.org/dontpanic92/swig.svg?branch=new-gobackend)](https://travis-ci.org/dontpanic92/swig)
 
 This repo is a demo of an alternative go backend for swig. It uses the anonymous field feature in golang to shorten the wrapper code. 
 
