@@ -68,4 +68,4 @@ script:
   - echo -en 'travis_fold:end:script.3\\r'
 branches:
   only:
-    - master
+    - new-gobackend
