@@ -198,8 +198,18 @@ protected:
     String *unique_id;
     // Indicate it is generating a convert function.
     bool convertFunction;
-    // Whether track the object by go gc.
-    bool trackobject_flag;
+    // The trackobject level.
+    // Level 0: do nothing.
+    // Level 1: add SwigTrackObject and SwigUntrackObject to every object
+    // Level 2: automatically track the objects that is returned by a function by value, 
+    //          e.g track the A returned by SomeFunction :
+    //          ```
+    //          struct A {/*...*/};
+    //          A SomeFunction(){ return A{}; }
+    //          ```
+    //          These objects cannot be taken own by any functions, so we can safely track it.
+    // Level 3: (Experimental!) automatically track every object.
+    int trackobject_level;
 
 public:
     GO():package(NULL),
@@ -246,7 +256,7 @@ public:
         go_imports(NULL),
         unique_id(NULL),
         convertFunction(false),
-        trackobject_flag(false) {
+        trackobject_level(0) {
         director_multiple_inheritance = 1;
         director_language = 1;
         director_prot_ctor_code = NewString("_swig_gopanic(\"accessing abstract class or protected constructor\");");
@@ -332,8 +342,13 @@ protected:
                         Swig_arg_error();
                     }
                 } else if (strcmp(argv[i], "-trackobject") == 0) {
+                    trackobject_level = atoi(argv[i + 1]);
+                    if (trackobject_level < 0 || trackobject_level > 3) {
+                        Printf(stderr, "-trackobject should be 0, 1, 2 or 3\n");
+                        Swig_arg_error();
+                    }
                     Swig_mark_arg(i);
-                    trackobject_flag = true;  
+                    Swig_mark_arg(i + 1);
                 } else if (strcmp(argv[i], "-help") == 0) {
                     //display_help = true;
                     Printf(stdout, "%s\n", usage);
@@ -655,8 +670,17 @@ protected:
                     Printv(f_go_wrappers, "\treturn p\n", NULL);
                     Printv(f_go_wrappers, "}\n", NULL);
 
+                    if (trackobject_level > 0) {
+                        Printv(f_go_wrappers, "func (p SwigClass", ty, ") SwigTrackObject(){\n}\n", NULL);
+                        Printv(f_go_wrappers, "func (p SwigClass", ty, ") SwigUntrackObject(){\n}\n", NULL);
+                    }
+
                     Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
                     Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
+                    if (trackobject_level > 0) {
+                        Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
+                        Printv(f_go_wrappers, "\tSwigUntrackObject()\n", NULL);
+                    }
                     Printv(f_go_wrappers, "}\n\n", NULL);
                 }
                 Delete(cp);
@@ -1357,15 +1381,15 @@ protected:
             Printv(f_go_wrappers, "\tswig_r = *(*", ret_type, ")(unsafe.Pointer(&swig_r_p))\n", NULL);
         }
 
-        if (trackobject_flag) {
+        if (trackobject_level >= 2) {
             SwigType *ty = SwigType_typedef_resolve_all(info->result);
-            if ((info->is_constructor && !Getattr(class_node, "feature:notracking"))
-                || (!info->is_constructor && goTypeIsInterface(info->n, info->result) && !SwigType_ispointer(ty))) {
+            if ((info->is_constructor && !Getattr(class_node, "feature:notracking") && trackobject_level >= 3)
+                || (!info->is_constructor && SwigType_type(info->result) != T_VOID && goTypeIsInterface(info->n, info->result) && !SwigType_ispointer(ty) && !SwigType_isreference(ty))) {
                 Printv(f_go_wrappers, "\tswig_r.SwigTrackObject()\n", NULL);
             }
             Delete(ty);
 
-            if (Getattr(info->n, "feature:trackself")) {
+            if (trackobject_level >= 3 && Getattr(info->n, "feature:trackself")) {
                 if (Strcmp(Getattr(info->n, "feature:trackself"), "1") == 0) {
                     Printv(f_go_wrappers, "\t", receiverName, ".SwigTrackObject()\n");
                 } else {
@@ -3091,7 +3115,7 @@ protected:
         Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
         Printv(f_go_wrappers, "\tSwigIs", go_class_name, "()\n", NULL);
 
-        if (trackobject_flag) {
+        if (trackobject_level > 0) {
             Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
             Printv(f_go_wrappers, "\tSwigUntrackObject()\n", NULL);
         }
@@ -3103,7 +3127,7 @@ protected:
         Printv(f_go_wrappers, "}\n\n", NULL);
 
 
-        if (trackobject_flag) {
+        if (trackobject_level > 0) {
             Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigTrackObject() {\n", NULL);
             Printv(f_go_wrappers, "\truntime.SetFinalizer(p, swig", go_class_name, "Finalizer)\n", NULL);
             Printv(f_go_wrappers, "}\n", NULL);
@@ -3625,18 +3649,12 @@ CleanUp:
                     Printv(f_go_wrappers, "func (p ", go_type_name, ") SwigIsSwigClass", go_base_name, "() {\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
 
-
-                    Printv(f_go_wrappers, "func (p *", go_type_name, ") To", go_base_name, "() ", go_base_type, " {\n", NULL);
-                    Printv(f_go_wrappers, "\treturn &p.", chain, "SwigClass", go_base_name, "\n", NULL);
-                    Printv(f_go_wrappers, "}\n\n", NULL);
-
                     Printv(f_go_wrappers, "func (p *", go_type_name, ") SwigGet", go_base_name, "() ", go_base_type, " {\n", NULL);
-                    Printv(f_go_wrappers, "\treturn p.To", go_base_name, "()\n", NULL);
+                    Printv(f_go_wrappers, "\treturn &p.", chain, "SwigClass", go_base_name, "\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
 
                     if (interfaces) {
                         Printv(interfaces, "\tSwigIsSwigClass", go_base_name, "()\n", NULL);
-                        Printv(interfaces, "\tTo", go_base_name, "() ", go_base_type, "\n", NULL);
                         Printv(interfaces, "\tSwigGet", go_base_name, "() ", go_base_type, "\n", NULL);
                     }
 

@@ -1,6 +1,5 @@
-language: cpp
+language: go
 
-compiler: gcc
 os: linux
 env: SWIGLANG=go
 go:

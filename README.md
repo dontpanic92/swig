@@ -12,8 +12,6 @@ Only working with `-cgo` option.
 
 ### Let Go's GC Track C++ Objects
 
-**Note: This feature is experimental !!**
-
 #### Current Memory Management
 
 For now, SWIG generated go code will not track the C++ object. That means we have to manually call destructors if we won't use any C++ object. For example,
@@ -33,9 +31,21 @@ func test() {
 }
 ```  
 
-#### New SWIG option `-trackobject`
+#### New SWIG option `-trackobject N`
 
-`-trackobject` can let Go's garbage collector delete C++ objects automatically when we don't need them. Using this option, we can write the following code without memory leak:
+`-trackobject` can generate some useful functions and code to let Go's garbage collector delete C++ objects automatically when we don't need them. It has 4 levels for now, i.e `N` can be 0, 1, 2, or 3:
+
+- Level 0: Do nothing.
+- Level 1: Add `SwigTrackObject` and `SwigUntrackObject` functions to every object. Users can call these functions to let Go's GC track the object.
+- Level 2: Automatically track the objects that is returned by a function by value. For example the object of `A` returned by `SomeFunction`,
+```
+struct A {/*...*/};
+A SomeFunction(){ return A{}; }
+```
+These objects cannot be taken own by other functions, so we can safely track it.
+- Level 3: (Experimental!!) Automatically track every object when it is created.
+
+Using `-trackobject 3` option, we can write the following code without memory leak:
 
 ```
 // Go code
@@ -46,6 +56,8 @@ func test() {
     obj.SetWindowSize(wrap.NewSize(40, 40))
 }
 ```
+
+However, we must think more if we want to use `-trackobject 3` option. There are some issues about it.
 
 #### Ownership Issues
 
@@ -67,7 +79,7 @@ private:
 
 ```
 
-We must let Go know about it, otherwise the obejcts will be double freed. This can be done by change the parameters' names to `SWIG_TAKEOWN`, after including `trackobjects.i`. SWIG source code is as below:
+If we use `-trackobject 3` option, we must let Go know about it. Otherwise the obejcts will be double freed. This can be done by change the parameters' names to `SWIG_TAKEOWN`, after including `trackobjects.i`. SWIG source code is as below:
 
 ```
 // SWIG code
