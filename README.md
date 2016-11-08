@@ -12,6 +12,8 @@ Only working with `-cgo` option.
 
 ### Let Go's GC Track C++ Objects
 
+**Note: This feature is experimental !!**
+
 #### Current Memory Management
 
 For now, SWIG generated go code will not track the C++ object. That means we have to manually call destructors if we won't use any C++ object. For example,
@@ -65,11 +67,11 @@ private:
 
 ```
 
-We must let Go know about it, otherwise the obejcts will be double freed. This can be done by change the parameters' names to `SWIG_TAKEOWN`, after including `typemaps.i`. SWIG source code is as below:
+We must let Go know about it, otherwise the obejcts will be double freed. This can be done by change the parameters' names to `SWIG_TAKEOWN`, after including `trackobjects.i`. SWIG source code is as below:
 
 ```
 // SWIG code
-%include "typemaps.i"
+%include "trackobjects.i"
 
 void DoSomething(Object* SWIG_TAKEOWN);
 
@@ -104,7 +106,7 @@ For some reason, we may not want to track some specific C++ classes' objects. We
 
 ```
 // SWIG code
-%include "typemaps.i"
+%include "trackobjects.i"
 
 %notracking SomeClass;
 class SomeClass {};

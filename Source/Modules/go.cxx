@@ -1160,13 +1160,17 @@ protected:
         Parm *p = info->parms;
         int pi = 0;
 
+        String* receiverName = NewString("");
+
         // Add the receiver first if this is a method.
         if (info->receiver) {
             Printv(f_go_wrappers, "(", NULL);
             if (info->base && info->receiver) {
-                Printv(f_go_wrappers, "_swig_base", NULL);
+                Printv(receiverName, "_swig_base", NULL);
+                Printv(f_go_wrappers, receiverName, NULL);
             } else {
-                Printv(f_go_wrappers, Getattr(p, "lname"), NULL);
+                Printv(receiverName, Getattr(p, "lname"), NULL);
+                Printv(f_go_wrappers, receiverName, NULL);
                 p = nextParm(p);
                 ++pi;
             }
@@ -1258,7 +1262,7 @@ protected:
             if (info->is_constructor || goTypeIsInterface(info->n, info->result) || convertFunction) {
                 if (info->is_constructor)
                     wt = goCPointerType(class_name, false);
-                else
+                else 
                     wt = goWrapperType(info->n, info->result, true);
                 //if (info->is_constructor || convertFunction) {
                 Printv(call, wt, "SetSwigcptr(uintptr(", NULL);
@@ -1353,9 +1357,24 @@ protected:
             Printv(f_go_wrappers, "\tswig_r = *(*", ret_type, ")(unsafe.Pointer(&swig_r_p))\n", NULL);
         }
 
-        if (trackobject_flag && info->is_constructor && !Getattr(class_node, "feature:notracking")) {
-            Printv(f_go_wrappers, "\tswig_r.SwigTrackObject()\n", NULL);
+        if (trackobject_flag) {
+            SwigType *ty = SwigType_typedef_resolve_all(info->result);
+            if ((info->is_constructor && !Getattr(class_node, "feature:notracking"))
+                || (!info->is_constructor && goTypeIsInterface(info->n, info->result) && !SwigType_ispointer(ty))) {
+                Printv(f_go_wrappers, "\tswig_r.SwigTrackObject()\n", NULL);
+            }
+            Delete(ty);
+
+            if (Getattr(info->n, "feature:trackself")) {
+                if (Strcmp(Getattr(info->n, "feature:trackself"), "1") == 0) {
+                    Printv(f_go_wrappers, "\t", receiverName, ".SwigTrackObject()\n");
+                } else {
+                    Printv(f_go_wrappers, "\t", receiverName, ".SwigUntrackObject()\n");
+                }
+            }
         }
+
+        Delete(receiverName);
         
         if (ret_type) {
             Delete(ret_type);

@@ -1,34 +1,11 @@
 language: cpp
-matrix:
-  include:
-    - compiler: clang
-      os: linux
-      env: SWIGLANG=
-    - compiler: gcc
-      os: linux
-      env: SWIGLANG=
-    - os: linux
-      env: SWIGLANG= SWIG_CC=gcc-5 SWIG_CXX=g++-5 CPP11=1
-      sudo: required
-      dist: trusty
-    - os: linux
-      env: SWIGLANG= SWIG_CC=gcc-6 SWIG_CXX=g++-6
-      sudo: required
-      dist: trusty
-    - compiler: gcc
-      os: linux
-      env: SWIGLANG=go
-      go: 1.6
-    - compiler: gcc
-      os: linux
-      env: SWIGLANG=go
-      go: 1.7
-    - compiler: clang
-      os: osx
-      env: SWIGLANG=
-    - compiler: clang
-      os: osx
-      env: SWIGLANG=go
+
+compiler: gcc
+os: linux
+env: SWIGLANG=go
+go:
+  - 1.6
+  - 1.7
 
 
 before_install:
