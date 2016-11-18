@@ -3078,26 +3078,17 @@ protected:
             }
         }
 
-        //String* ret = NewString("");
-        //String* gt = goType(var, ty);
-
-        //Printv(stdout, "SwigGet: ", type, "\n", NULL);
-        //Printv(stdout, DohStr(undefined_types), "\n", NULL);
-        //if (Getattr(undefined_types, ty) && !Getattr(defined_types, gt))
         Node* cn = classLookup(ty);
-        //Printv(stdout, DohStr(Getattr(n, "typescope")), "\n", NULL);
         String* ret = NewString("");
         if (!cn || !GetFlag(cn, "module")) {
             Printv(ret, ".SwigGetUndefined()", NULL);
         } else {
-            //String* gt = goType(var, Getattr(var, "type"));
             String *cname = Getattr(cn, "sym:name");
             if (!cname) {
                 cname = Getattr(cn, "name");
             }
             String* gt = exportedName(cname);
             Printv(ret, ".SwigGet", gt, "()", NULL);
-            //Printv(stdout, gt, "\n", 0);
             Delete(gt);
         }
         return ret;
@@ -3328,7 +3319,7 @@ CleanUp:
         if (GetFlag(base, "feature:ignore")) {
             return SWIG_OK;
         }
-
+        Hash* seen_in_this_base = NewHash();
         for (Node *ni = Getattr(base, "firstChild"); ni; ni = nextSibling(ni)) {
 
             if (GetFlag(ni, "feature:ignore")) {
@@ -3367,6 +3358,10 @@ CleanUp:
             // especially in virtual inheritance.
             // After that it is stored in the `local`, and will be not 
             // processed if we see it later.
+            if (Getattr(seen_in_this_base, lname)) {
+                continue;
+            }
+
             Node* node = ni;
             List* bs = bases;
             int generate = 0; 
@@ -3374,15 +3369,17 @@ CleanUp:
             if (Getattr(visited, lname)) {
                 node = Getattr(visited, lname);
                 bs = Getattr(node, "addbase:bases");
-                if (Getattr(node, "sym:overloaded")) {
+                //if (Getattr(node, "sym:overloaded")) {
+                //if (Getattr(node, "addbase:baseclass") == base) {
                     // Overload functions??
-                    continue;
-                }
+                //    continue;
+                //}
                 generate = 1;
                 Setattr(local, lname, NewString(""));
             } else {
                 Setattr(visited, lname, node);
-                //Setattr(node, "addbase:baseclass", base);
+                Setattr(seen_in_this_base, lname, node);
+                Setattr(node, "addbase:baseclass", base);
                 Setattr(node, "addbase:bases", bases);
             }
 
@@ -3452,6 +3449,7 @@ CleanUp:
                 }
             }
         }
+        Delete(seen_in_this_base);
 
         List *baselist = Getattr(base, "bases");
         if (baselist && Len(baselist) > 0) {
