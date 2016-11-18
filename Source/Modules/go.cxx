@@ -108,6 +108,8 @@ static void siphash(swig_uint64 *out, const char *inc, unsigned long inlen) {
 }
 #undef SIPROUND
 
+extern int Verbose;
+
 class GO:public Language {
 protected:
     static const char *const usage;
@@ -652,6 +654,16 @@ protected:
         }
 
         Printv(f_go_wrappers, "\n", NULL);
+
+        Printv(f_go_wrappers, "type swig_undefined interface {\n", NULL);
+        Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
+        Printv(f_go_wrappers, "\tSwigGetUndefined() swig_undefined\n", NULL);
+        if (trackobject_level > 0) {
+            Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
+            Printv(f_go_wrappers, "\tSwigUntrackObject()\n", NULL);
+        }
+        Printv(f_go_wrappers, "}\n\n", NULL);
+
         for (Iterator p = First(undefined_types); p.key; p = Next(p)) {
             String *ty = goType(NULL, p.key);
             if (!Getattr(defined_types, ty)) {
@@ -670,7 +682,7 @@ protected:
                     Printv(f_go_wrappers, "\treturn p\n", NULL);
                     Printv(f_go_wrappers, "}\n", NULL);
 
-                    Printv(f_go_wrappers, "func (p *SwigClass", ty, ") SwigGet", ty, "() ", ty, " {\n", NULL);
+                    Printv(f_go_wrappers, "func (p *SwigClass", ty, ") SwigGetUndefined() swig_undefined {\n", NULL);
                     Printv(f_go_wrappers, "\treturn p\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
 
@@ -679,7 +691,7 @@ protected:
                         Printv(f_go_wrappers, "func (p SwigClass", ty, ") SwigUntrackObject(){\n}\n", NULL);
                     }
 
-                    Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
+                    /*Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
                     Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
                     Printv(f_go_wrappers, "\tSwigGet", ty, "() ", ty, "\n", NULL);
                     if (trackobject_level > 0) {
@@ -690,6 +702,19 @@ protected:
 
                     Printv(f_go_wrappers, "type SwigIs", ty, " interface {\n", NULL);
                     Printv(f_go_wrappers, "\tSwigGet", ty, "() ", ty, "\n", NULL);
+                    Printv(f_go_wrappers, "}\n\n", NULL);*/
+
+                    Printv(f_go_wrappers, "type ", ty, " interface {\n", NULL);
+                    Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
+                    Printv(f_go_wrappers, "\tSwigGetUndefined() swig_undefined\n", NULL);
+                    if (trackobject_level > 0) {
+                        Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
+                        Printv(f_go_wrappers, "\tSwigUntrackObject()\n", NULL);
+                    }
+                    Printv(f_go_wrappers, "}\n\n", NULL);
+
+                    Printv(f_go_wrappers, "type SwigIs", ty, " interface {\n", NULL);
+                    Printv(f_go_wrappers, "\tSwigGetUndefined() swig_undefined\n", NULL);
                     Printv(f_go_wrappers, "}\n\n", NULL);
                 }
                 Delete(cp);
@@ -1053,7 +1078,6 @@ protected:
         assert(result);
 
         int ret = SWIG_OK;
-
         if (cgo_flag) {
             int r = makeCgoWrappers(n, go_name, overname, wname, base, parms, result, is_static);
             if (r != SWIG_OK) {
@@ -1265,13 +1289,14 @@ protected:
         if (SwigType_type(info->result) != T_VOID) {
             if (info->is_constructor) {
                 ret_type = NewString("*");
-                String *cl = goCPointerType(class_name, false);
+                String *cl = class_receiver;//goCPointerType(class_name, false);
                 Append(ret_type, cl);
-                Delete(cl);
+                //Delete(cl);
             } else {
                 ret_type = goImType(info->n, info->result);
                 if (goTypeIsInterface(info->n, info->result)) {
                     String* tmp = goWrapperType(info->n, info->result, true);
+                    //Printv(stdout, info->result, "\n", 0);
                     Delete(ret_type);
                     ret_type = NewString("*");
                     Append(ret_type, tmp);
@@ -1294,7 +1319,7 @@ protected:
 
             if (info->is_constructor || goTypeIsInterface(info->n, info->result) || convertFunction) {
                 if (info->is_constructor)
-                    wt = goCPointerType(class_name, false);
+                    wt = Copy(class_receiver);//goCPointerType(class_name, false);
                 else 
                     wt = goWrapperType(info->n, info->result, true);
                 //if (info->is_constructor || convertFunction) {
@@ -1352,10 +1377,15 @@ protected:
             }
 
             String* swigcptr = NewString("");
-            if ((i == 0 && info->is_destructor) || ((i > 0 || !info->receiver || info->base || info->is_constructor) && goTypeIsInterface(p, pt)) || (i == 0 && info->receiver && !info->base)) {
-                String* gt = goType(p, pt);
-                Printv(swigcptr, ".SwigGet", gt, "().Swigcptr()", NULL);
-                Delete(gt);
+            if ((i == 0 && info->is_destructor)) {
+                Printv(swigcptr, ".Swigcptr()", NULL);
+            } else if (((i > 0 || !info->receiver || info->base || info->is_constructor) && goTypeIsInterface(p, pt)) || (i == 0 && info->receiver && !info->base)) {
+                //String* gt = goType(p, pt);
+                //Printv(swigcptr, ".SwigGet", gt, "().Swigcptr()", NULL);
+                //Delete(gt);
+                String* ret = getSwigGetCall(p);
+                Printv(swigcptr, ret, ".Swigcptr()", NULL);
+                Delete(ret);
             }
 
             bool c_struct_type;
@@ -2941,6 +2971,14 @@ protected:
             i++;
         }
     }
+    
+    void visitBaseClassesNoIgnore(List *baselist, PROCESS_BASE_FUNC processFunc) {
+        int i = 0;
+        for (Iterator b = First(baselist); b.item; b = Next(b)) {
+            (this->*processFunc)(b.item, i);
+            i++;
+        }
+    }
 
     void visitAllBaseClasses(List *baselist, PROCESS_BASE_FUNC processFunc) {
         int i = 0;
@@ -2975,6 +3013,96 @@ protected:
         Delete(visited);
     }
 
+    String *goSwigIsInterfaceType(SwigType *type) {
+        SwigType *ty = SwigType_typedef_resolve_all(type);
+        while (true) {
+            if (SwigType_ispointer(ty)) {
+                SwigType_del_pointer(ty);
+            } else if (SwigType_isarray(ty)) {
+                SwigType_del_array(ty);
+            } else if (SwigType_isreference(ty)) {
+                SwigType_del_reference(ty);
+            } else if (SwigType_isqualifier(ty)) {
+                SwigType_del_qualifier(ty);
+            } else {
+                break;
+            }
+        }
+
+        Node *cn = classLookup(ty);
+        String *ex;
+        String *ret;
+        if (!cn) {
+            /*if (add_to_hash) {
+                Setattr(undefined_types, ty, ty);
+            }*/
+            ret = NewString("SwigIs");
+            ex = exportedName(ty);
+            Append(ret, ex);
+        } else {
+            String *cname = Getattr(cn, "sym:name");
+            if (!cname) {
+                cname = Getattr(cn, "name");
+            }
+            ex = exportedName(cname);
+            Node *cnmod = Getattr(cn, "module");
+            if (!cnmod || Strcmp(Getattr(cnmod, "name"), module) == 0) {
+                /*if (add_to_hash) {
+                    Setattr(undefined_types, ty, ty);
+                }*/
+                ret = NewString("SwigIs");
+                Append(ret, ex);
+            } else {
+                ret = NewString("");
+                Printv(ret, getModuleName(Getattr(cnmod, "name")), ".SwigIs", ex, NULL);
+            }
+        }
+        Delete(ty);
+        Delete(ex);
+        return ret;
+    }
+
+    String* getSwigGetCall(void* var) {
+        SwigType* ty = SwigType_typedef_resolve_all(Getattr(var, "type"));
+        while (true) {
+            if (SwigType_ispointer(ty)) {
+                SwigType_del_pointer(ty);
+            } else if (SwigType_isarray(ty)) {
+                SwigType_del_array(ty);
+            } else if (SwigType_isreference(ty)) {
+                SwigType_del_reference(ty);
+            } else if (SwigType_isqualifier(ty)) {
+                SwigType_del_qualifier(ty);
+            } else {
+                break;
+            }
+        }
+
+        //String* ret = NewString("");
+        //String* gt = goType(var, ty);
+
+        //Printv(stdout, "SwigGet: ", type, "\n", NULL);
+        //Printv(stdout, DohStr(undefined_types), "\n", NULL);
+        //if (Getattr(undefined_types, ty) && !Getattr(defined_types, gt))
+        Node* cn = classLookup(ty);
+        //Printv(stdout, DohStr(Getattr(n, "typescope")), "\n", NULL);
+        String* ret = NewString("");
+        if (!cn || !GetFlag(cn, "module")) {
+            Printv(ret, ".SwigGetUndefined()", NULL);
+        } else {
+            //String* gt = goType(var, Getattr(var, "type"));
+            String *cname = Getattr(cn, "sym:name");
+            if (!cname) {
+                cname = Getattr(cn, "name");
+            }
+            String* gt = exportedName(cname);
+            Printv(ret, ".SwigGet", gt, "()", NULL);
+            //Printv(stdout, gt, "\n", 0);
+            Delete(gt);
+        }
+        return ret;
+    }
+
     /* ------------------------------------------------------------
    * classHandler()
    *
@@ -3006,6 +3134,8 @@ protected:
         bool has_base_classes = baselist && Len(baselist) > 0;
         String *name = Getattr(n, "sym:name");
         String *go_name = exportedName(name);
+        //String* go_type = goType(n, name);
+        //Printv(stdout, go_type, " ", go_name, "\n", NULL);
 
 
         if (!checkNameConflict(go_name, n, NULL)) {
@@ -3014,7 +3144,9 @@ protected:
             return SWIG_NOWRAP;
         }
 
-        String *go_class_name = goCPointerType(Getattr(n, "classtypeobj"), true);
+        String *go_class_name = NewString("SwigClass");//goCPointerType(Getattr(n, "classtypeobj"), true);//
+        Append(go_class_name, go_name);
+        //goCPointerType(Getattr(n, "classtypeobj"), true);
         String *go_swigcptr_name = NewString("swigcptr");
         //Append(go_swigcptr_name, go_name);
 
@@ -3053,10 +3185,15 @@ protected:
         }
         Printv(f_go_wrappers, "\treturn p\n}\n\n", NULL);
 
-        Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigIs", go_name, "() {\n", NULL);
+        //Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigIs", go_name, "() {\n", NULL);
+        //Printv(f_go_wrappers, "}\n\n", NULL);
+
+        Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigGet", go_name, "() " , go_name, " {\n", NULL);
+        Printv(f_go_wrappers, "\treturn p\n", NULL);
         Printv(f_go_wrappers, "}\n\n", NULL);
 
-        Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigGet", go_name, "()" , go_name, " {\n", NULL);
+        // Every class is matched with undefined types
+        Printv(f_go_wrappers, "func (p *", go_class_name, ") SwigGetUndefined() swig_undefined {\n", NULL);
         Printv(f_go_wrappers, "\treturn p\n", NULL);
         Printv(f_go_wrappers, "}\n\n", NULL);
 
@@ -3133,8 +3270,8 @@ protected:
         // Generate interface
         Printv(f_go_wrappers, "type ", go_name, " interface {\n", NULL);
         Printv(f_go_wrappers, "\tSwigcptr() uintptr\n", NULL);
-        Printv(f_go_wrappers, "\tSwigIs", go_name, "()\n", NULL);
         Printv(f_go_wrappers, "\tSwigGet", go_name, "() ", go_name, "\n", NULL);
+        Printv(f_go_wrappers, "\tSwigGetUndefined() swig_undefined\n", NULL);
 
         if (trackobject_level > 0) {
             Printv(f_go_wrappers, "\tSwigTrackObject()\n", NULL);
@@ -3167,6 +3304,7 @@ protected:
         ret = SWIG_OK;
 CleanUp:
         Delete(go_name);
+        //Delete(go_type);
         Delete(go_swigcptr_name);
         Delete(go_class_name);
         Delete(interfaces);
@@ -3225,7 +3363,8 @@ CleanUp:
 
             // When we first see a name, we only generate the interface
             // for it. For the second time, we generate the 
-            // function for it to solve the "ambiguous" functions issue.
+            // function for it to solve the "ambiguous" functions issue,
+            // especially in virtual inheritance.
             // After that it is stored in the `local`, and will be not 
             // processed if we see it later.
             Node* node = ni;
@@ -3233,12 +3372,17 @@ CleanUp:
             int generate = 0; 
             // 0: interface only; 1: function only; 2: interface + function
             if (Getattr(visited, lname)) {
-                generate = 1;
                 node = Getattr(visited, lname);
                 bs = Getattr(node, "addbase:bases");
+                if (Getattr(node, "sym:overloaded")) {
+                    // Overload functions??
+                    continue;
+                }
+                generate = 1;
                 Setattr(local, lname, NewString(""));
             } else {
                 Setattr(visited, lname, node);
+                //Setattr(node, "addbase:baseclass", base);
                 Setattr(node, "addbase:bases", bases);
             }
 
@@ -3351,7 +3495,14 @@ CleanUp:
                 Printv(parm_print, Getattr(p, "lname"), " ", NULL);
                 String *tm = goType(p, Getattr(p, "type"));
                 if (goTypeIsInterface(p, Getattr(p, "type"))) {
-                    Printv(parm_print, "SwigIs", NULL);
+                    //Printv(parm_print, "SwigIs", NULL);
+                    //Printv(stdout, Getattr(p, "type"), "\n", NULL);
+                    //Printv(stdout, goSwigIsInterfaceType(goType(NULL, Getattr(p, "type"))), "\n\n", NULL);
+                    //tm = goType(p, Getattr(p, "type"));
+                    //Delete(tm);
+                    String* tmp = goSwigIsInterfaceType(Getattr(p, "type"));
+                    Delete(tm);
+                    tm = tmp;
                 }
                 Printv(parm_print, tm, NULL);
                 Delete(tm);
@@ -3598,55 +3749,6 @@ CleanUp:
         return SWIG_OK;
     }
 
-    /* ------------------------------------------------------------
-   * addFirstBaseInterface()
-   *
-   * When a C++ class uses multiple inheritance, we can use the C++
-   * pointer for the first base class but not for any subsequent base
-   * classes.  However, the Go interface will match the interface for
-   * all the base classes.  To avoid accidentally treating a class as
-   * a pointer to a base class other than the first one, we use an
-   * isClassname method.  This function adds those methods as
-   * required.
-   *
-   * For convenience when using multiple inheritance, we also add
-   * functions to retrieve the base class pointers.
-   * ------------------------------------------------------------ 
-
-    void addFirstBaseInterface(Node *n, Hash *parents, List *bases) {
-        if (!bases || Len(bases) == 0) {
-            return;
-        }
-        Iterator b = First(bases);
-        if (!GetFlag(b.item, "feature:ignore")) {
-            String *go_name = buildGoName(Getattr(n, "sym:name"), false, false);
-            String *go_type_name = goCPointerType(Getattr(n, "classtypeobj"), true);
-            String *go_base_name = exportedName(Getattr(b.item, "sym:name"));
-            String *go_base_type = goType(n, Getattr(b.item, "classtypeobj"));
-            String *go_base_type_name = goCPointerType(Getattr(b.item, "classtypeobj"), true);
-
-            Printv(f_go_wrappers, "func (p ", go_type_name, ") SwigIs", go_base_name, "() {\n", NULL);
-            Printv(f_go_wrappers, "}\n\n", NULL);
-
-            Printv(interfaces, "\tSwigIs", go_base_name, "()\n", NULL);
-
-            Printv(f_go_wrappers, "func (p ", go_type_name, ") SwigGet", go_base_name, "() ", go_base_type, " {\n", NULL);
-            Printv(f_go_wrappers, "\treturn ", go_base_type_name, "(p.Swigcptr())\n", NULL);
-            Printv(f_go_wrappers, "}\n\n", NULL);
-
-            Printv(interfaces, "\tSwigGet", go_base_name, "() ", go_base_type, "\n", NULL);
-
-            Setattr(parents, go_base_name, NewString(""));
-
-            Delete(go_name);
-            Delete(go_type_name);
-            Delete(go_base_type);
-            Delete(go_base_type_name);
-        }
-
-        addFirstBaseInterface(n, parents, Getattr(b.item, "bases"));
-    }*/
-
     void addConvertFunctions(Node *n, Hash *parents, List *bases) {
         String* chain = NewString("");
         addConvertFunctions(n, parents, bases, chain);
@@ -3660,7 +3762,7 @@ CleanUp:
         
         for (Iterator b = First(bases); b.item; b = Next(b)) {
             if (!GetFlag(b.item, "feature:ignore")) {
-                String *go_name = buildGoName(Getattr(n, "sym:name"), false, false);
+                //String *go_name = buildGoName(Getattr(n, "sym:name"), false, false);
                 String *go_type_name = goCPointerType(Getattr(n, "classtypeobj"), true);
                 String *go_base_name = exportedName(Getattr(b.item, "sym:name"));
                 String *go_base_type = goType(n, Getattr(b.item, "classtypeobj"));
@@ -3685,9 +3787,9 @@ CleanUp:
                     Setattr(parents, go_base_name, NewString(""));
                 }
 
-                Delete(go_name);
-                Delete(go_type_name);
                 Delete(go_base_type);
+                Delete(go_base_name);
+                Delete(go_type_name);
                 //Delete(go_class_name);
                 //Delete(go_base_class_name);
             }
@@ -3842,146 +3944,6 @@ CleanUp:
         return SWIG_OK;
     }
 
-
-    /* ------------------------------------------------------------
-   * addExtraBaseInterfaces()
-   *
-   * Add functions to retrieve the base class pointers for all base
-   * classes other than the first.
-   * ------------------------------------------------------------ 
-
-    int addExtraBaseInterfaces(Node *n, Hash *parents, List *bases) {
-        Iterator b = First(bases);
-
-        Node *fb = b.item;
-
-        for (b = Next(b); b.item; b = Next(b)) {
-            if (GetFlag(b.item, "feature:ignore")) {
-                continue;
-            }
-
-            String *go_base_name = exportedName(Getattr(b.item, "sym:name"));
-
-            Swig_save("addExtraBaseInterface", n, "wrap:action", "wrap:name", "wrap:parms", NULL);
-
-            SwigType *type = Copy(Getattr(n, "classtypeobj"));
-            SwigType_add_pointer(type);
-            Parm *parm = NewParm(type, "self", n);
-            Setattr(n, "wrap:parms", parm);
-
-            String *pn = Swig_cparm_name(parm, 0);
-            String *action = NewString("");
-            Printv(action, Swig_cresult_name(), " = (", Getattr(b.item, "classtype"), "*)", pn, ";", NULL);
-            Delete(pn);
-
-            Setattr(n, "wrap:action", action);
-
-            String *name = Copy(class_name);
-            Append(name, "_SwigGet");
-            Append(name, go_base_name);
-
-            String *go_name = NewString("SwigGet");
-            String *c1 = exportedName(go_base_name);
-            Append(go_name, c1);
-            Delete(c1);
-
-            String *wname = Swig_name_wrapper(name);
-            Append(wname, unique_id);
-            Setattr(n, "wrap:name", wname);
-
-            SwigType *result = Copy(Getattr(b.item, "classtypeobj"));
-            SwigType_add_pointer(result);
-
-            int r = makeWrappers(n, name, go_name, NULL, wname, NULL, parm, result,
-                                 false);
-            if (r != SWIG_OK) {
-                return r;
-            }
-
-            Swig_restore(n);
-
-            Setattr(parents, go_base_name, NewString(""));
-
-            Delete(go_name);
-            Delete(type);
-            Delete(parm);
-            Delete(action);
-            Delete(result);
-
-            String *ns = NewString("");
-            addParentExtraBaseInterfaces(n, parents, b.item, false, ns);
-            Delete(ns);
-        }
-
-        if (!GetFlag(fb, "feature:ignore")) {
-            String *ns = NewString("");
-            addParentExtraBaseInterfaces(n, parents, fb, true, ns);
-            Delete(ns);
-        }
-
-        return SWIG_OK;
-    }*/
-
-    /* ------------------------------------------------------------
-   * addParentExtraBaseInterfaces()
-   *
-   * Add functions to retrieve the base class pointers for all base
-   * classes of parents other than the first base class at each level.
-   * ------------------------------------------------------------ 
-
-    void addParentExtraBaseInterfaces(Node *n, Hash *parents, Node *base, bool is_base_first, String *sofar) {
-        List *baselist = Getattr(base, "bases");
-        if (!baselist || Len(baselist) == 0) {
-            return;
-        }
-
-        String *go_this_base_name = exportedName(Getattr(base, "sym:name"));
-
-        String *sf = NewString("");
-        Printv(sf, sofar, ".SwigGet", go_this_base_name, "()", NULL);
-
-        Iterator b = First(baselist);
-
-        if (is_base_first) {
-            if (!b.item) {
-                return;
-            }
-            if (!GetFlag(b.item, "feature:ignore")) {
-                addParentExtraBaseInterfaces(n, parents, b.item, true, sf);
-            }
-
-            b = Next(b);
-        }
-
-        String *go_name = buildGoName(Getattr(n, "sym:name"), false, false);
-        String *go_type_name = goCPointerType(Getattr(n, "classtypeobj"), true);
-
-        for (; b.item; b = Next(b)) {
-            if (GetFlag(b.item, "feature:ignore")) {
-                continue;
-            }
-
-            String *go_base_name = exportedName(Getattr(b.item, "sym:name"));
-
-            if (!Getattr(parents, go_base_name)) {
-                Printv(f_go_wrappers, "func (p ", go_type_name, ") SwigGet", go_base_name, "() ", go_base_name, " {\n", NULL);
-                Printv(f_go_wrappers, "\treturn p", sf, ".SwigGet", go_base_name, "()\n", NULL);
-                Printv(f_go_wrappers, "}\n\n", NULL);
-
-                Printv(interfaces, "\tSwigGet", go_base_name, "() ", go_base_name, "\n", NULL);
-
-                addParentExtraBaseInterfaces(n, parents, b.item, false, sf);
-
-                Setattr(parents, go_base_name, NewString(""));
-            }
-        }
-
-        Delete(go_name);
-        Delete(go_type_name);
-        Delete(go_this_base_name);
-        Delete(sf);
-    }*/
-
     /* ------------------------------------------------------------
    * classDirectorInit
    *
@@ -4033,8 +3995,8 @@ CleanUp:
         Printv(f_go_wrappers, "\treturn p.", go_type_name, ".Swigcptr()\n", NULL);
         Printv(f_go_wrappers, "}\n\n", NULL);
 
-        Printv(f_go_wrappers, "func (p *", director_struct_name, ") SwigIs", go_name, "() {\n", NULL);
-        Printv(f_go_wrappers, "}\n\n", NULL);
+        //Printv(f_go_wrappers, "func (p *", director_struct_name, ") SwigIs", go_name, "() {\n", NULL);
+        //Printv(f_go_wrappers, "}\n\n", NULL);
 
         Printv(f_go_wrappers, "func (p *", director_struct_name, ") SwigGet", go_name, "() ", go_name, " {\n", NULL);
         Printv(f_go_wrappers, "\treturn p\n", NULL);
@@ -4864,7 +4826,9 @@ CleanUp:
                 Printv(f_go_wrappers, Getattr(p, "lname"), " ", NULL);
                 String *tm = goType(p, Getattr(p, "type"));
                 if (goTypeIsInterface(p, Getattr(p, "type"))) {
-                    Printv(f_go_wrappers, "SwigIs", NULL);
+                    String* tmp = goSwigIsInterfaceType(Getattr(p, "type"));
+                    Delete(tm);
+                    tm = tmp;
                 }
                 Printv(f_go_wrappers, tm, NULL);
                 Delete(tm);
@@ -4896,9 +4860,9 @@ CleanUp:
                 }
                 Printv(f_go_wrappers, Getattr(p, "lname"), NULL);
                 if (goTypeIsInterface(p, Getattr(p, "type"))) {
-                    String* gt = goType(p, Getattr(p, "type"));
-                    Printv(f_go_wrappers, ".SwigGet", gt, "()", NULL);
-                    Delete(gt);
+                    String* ret = getSwigGetCall(p);
+                    Printv(f_go_wrappers, ret, NULL);
+                    Delete(ret);
                 }
                 p = nextParm(p);
             }
@@ -4999,9 +4963,9 @@ CleanUp:
                     if (goin == NULL) {
                         Printv(f_go_wrappers, "\t", ivar, " := ", ln, NULL);
                         if (goTypeIsInterface(p, pt)) {
-                            String* gt = goType(p, pt);
-                            Printv(f_go_wrappers, ".SwigGet", gt, "().Swigcptr()", NULL);
-                            Delete(gt);
+                            String* ret = getSwigGetCall(p);
+                            Printv(f_go_wrappers, ret, ".Swigcptr()", NULL);
+                            Delete(ret);
                         }
                         Printv(f_go_wrappers, "\n", NULL);
                     } else {
@@ -6333,13 +6297,13 @@ CleanUp:
                         }
 
                         fn = i + 1;
-                        String *nm = goType(pj, Getattr(pj, "type"));
-                        if (goTypeIsInterface(pj, Getattr(pj, "type"))) {
-                            Printf(f_go_wrappers, "\t\tif _, ok := a[%d].(SwigIs%s); !ok {\n", j, nm);
-                        } else {
+                        //String *nm = goType(pj, Getattr(pj, "type"));
+                        //if (goTypeIsInterface(pj, Getattr(pj, "type"))) {
+                        //    Printf(f_go_wrappers, "\t\tif _, ok := a[%d].(SwigIs%s); !ok {\n", j, nm);
+                        //} else {
                             Printf(f_go_wrappers, "\t\tif _, ok := a[%d].(%s); !ok {\n", j, tm);
-                        }
-                        Delete(nm);
+                        //}
+                        //Delete(nm);
                         Printf(f_go_wrappers, "\t\t\tgoto check_%d\n", fn);
                         Printv(f_go_wrappers, "\t\t}\n", NULL);
                     }
@@ -6423,7 +6387,10 @@ CleanUp:
 
                 SwigType *tm = goType(p, Getattr(p, "type"));
                 if (goTypeIsInterface(p, Getattr(p, "type"))) {
-                    Printf(start, "a[%d].(SwigIs%s).SwigGet%s()", pn, tm, tm);
+                    String* tmp = goSwigIsInterfaceType(Getattr(p, "type"));
+                    String* ret = getSwigGetCall(p);
+                    Printf(start, "a[%d].(%s)%s", pn, tmp, ret);
+                    Delete(ret);
                 } else {
                     Printf(start, "a[%d].(%s)", pn, tm);
                 }
@@ -7077,6 +7044,27 @@ CleanUp:
         return Copy(ct);
     }
 
+    String *goSwigClassType(SwigType* type) {
+        SwigType* ty = Copy(type);
+        while (true) {
+            if (SwigType_ispointer(ty)) {
+                SwigType_del_pointer(ty);
+            } else if (SwigType_isarray(ty)) {
+                SwigType_del_array(ty);
+            } else if (SwigType_isreference(ty)) {
+                SwigType_del_reference(ty);
+            } else if (SwigType_isqualifier(ty)) {
+                SwigType_del_qualifier(ty);
+            } else {
+                break;
+            }
+        }
+        String* ret = NewString("SwigClass");
+        Append(ret, ty);
+        Delete(ty);
+        return ret;
+    }
+
     /* ----------------------------------------------------------------------
    * goWrapperType()
    *
@@ -7167,7 +7155,16 @@ CleanUp:
         }
 
         Delete(go_type);
-        return goType(n, type);
+
+        if (goTypeIsInterface(n, type)) {
+            String* ret = NewString("SwigIs");
+            String* gt = goType(n, type);
+            Append(ret, gt);
+            Delete(gt);
+            return ret;
+        } else {
+            return goType(n, type);
+        }
     }
 
     /* ----------------------------------------------------------------------
