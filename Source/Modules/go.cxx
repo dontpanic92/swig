@@ -7139,7 +7139,8 @@ CleanUp:
         }
 
         String* go_type = goType(n, ty);
-        if (Getattr(undefined_types, ty) && !Getattr(defined_types, go_type)) {
+        String* go_type2 = goType(n, type);
+        if (Getattr(undefined_types, ty) && !Getattr(defined_types, go_type) && Strncmp(go_type2, "[]", 2) != 0) {
             Delete(go_type);
             String* wrapperType = goWrapperType(n, type, true);
             if (Strcmp(wrapperType, "uintptr") != 0) {
@@ -7156,12 +7157,11 @@ CleanUp:
 
         if (goTypeIsInterface(n, type)) {
             String* ret = NewString("SwigIs");
-            String* gt = goType(n, type);
-            Append(ret, gt);
-            Delete(gt);
+            Append(ret, go_type2);
+            Delete(go_type2);
             return ret;
         } else {
-            return goType(n, type);
+            return go_type2;
         }
     }
 
