@@ -5064,9 +5064,17 @@ CleanUp:
                     Printv(f_c_directors_h, "return ", NULL);
                 }
 
-                String *super_call = Swig_method_call(super, parms);
+                //String *super_call = Swig_method_call(super, parms);
+                String *super_call_name = Copy(Getattr(parent, "name"));
+                Append(super_call_name, "::");
+                Append(super_call_name, Getattr(n, "name"));
+                //Printf(stdout, "%s\n", super_call_name);
+                //Printf(stdout, "%s\n", super);
+
+                String *super_call = Swig_method_call(super_call_name, parms);
                 Printv(f_c_directors_h, super_call, ";\n", NULL);
                 Delete(super_call);
+                Delete(super_call_name);
 
                 Printv(f_c_directors_h, "  }\n", NULL);
 

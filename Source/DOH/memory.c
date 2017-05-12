@@ -15,7 +15,8 @@
 #include "dohint.h"
 
 #ifndef DOH_POOL_SIZE
-#define DOH_POOL_SIZE         16384
+/*#define DOH_POOL_SIZE         16384*/
+#define DOH_POOL_SIZE         16000000
 #endif
 
 /* Checks stale DOH object use - will use a lot more memory as pool memory is not re-used. */
